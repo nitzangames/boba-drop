@@ -7,7 +7,7 @@ const SCALE = 154;        // pixels per world unit (~1080 / 7)
 const X_OFFSET = 540;     // center of canvas
 const Y_OFFSET = 132;     // top padding for HUD
 const BG_COLOR = '#FAF5F0';
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 // --- Tier Data ---
 const TIERS = [
@@ -228,6 +228,14 @@ let mergeCount = 0;
 world.onCollision = (a, b, contact) => {
   const cupA = a.userData;
   const cupB = b.userData;
+
+  // Impact sound for the most recently dropped cup
+  if (lastDroppedCup && (cupA === lastDroppedCup || cupB === lastDroppedCup)) {
+    const dropped = cupA === lastDroppedCup ? a : b;
+    const speed = Math.sqrt(dropped.velocity.x * dropped.velocity.x + dropped.velocity.y * dropped.velocity.y);
+    playImpactSound(speed);
+    lastDroppedCup = null; // only play on first impact
+  }
 
   if (!cupA || !cupB) return;
   if (!cupA.active || !cupB.active) return;
@@ -500,6 +508,27 @@ function playClickSound() {
   osc.stop(t + 0.05);
 }
 
+function playImpactSound(speed) {
+  if (!sfxEnabled || !audioCtx) return;
+  // Scale volume and pitch by collision speed
+  const vol = Math.min(0.3, speed * 0.05);
+  if (vol < 0.03) return; // too quiet, skip
+  const t = audioCtx.currentTime;
+  const freq = 150 + speed * 15;
+  const dur = 0.08;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  gain.connect(audioCtx.destination);
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, t);
+  osc.frequency.linearRampToValueAtTime(freq * 0.5, t + dur);
+  osc.connect(gain);
+  osc.start(t);
+  osc.stop(t + dur);
+}
+
 function playWarningSound() {
   if (!sfxEnabled || !audioCtx) return;
   const t = audioCtx.currentTime;
@@ -533,6 +562,72 @@ function playDropSound() {
   osc.connect(gain);
   osc.start(t);
   osc.stop(t + 0.08);
+}
+
+// --- Music ---
+let musicNodes = null;
+
+function startMusic() {
+  if (!musicEnabled || !audioCtx || musicNodes) return;
+
+  // Simple looping ambient melody using oscillators
+  const master = audioCtx.createGain();
+  master.gain.value = 0.08;
+  master.connect(audioCtx.destination);
+
+  // Warm pad (low chord)
+  const pad1 = audioCtx.createOscillator();
+  pad1.type = 'sine';
+  pad1.frequency.value = 220; // A3
+  const pad1Gain = audioCtx.createGain();
+  pad1Gain.gain.value = 0.4;
+  pad1.connect(pad1Gain);
+  pad1Gain.connect(master);
+  pad1.start();
+
+  const pad2 = audioCtx.createOscillator();
+  pad2.type = 'sine';
+  pad2.frequency.value = 277.18; // C#4
+  const pad2Gain = audioCtx.createGain();
+  pad2Gain.gain.value = 0.3;
+  pad2.connect(pad2Gain);
+  pad2Gain.connect(master);
+  pad2.start();
+
+  const pad3 = audioCtx.createOscillator();
+  pad3.type = 'sine';
+  pad3.frequency.value = 329.63; // E4
+  const pad3Gain = audioCtx.createGain();
+  pad3Gain.gain.value = 0.25;
+  pad3.connect(pad3Gain);
+  pad3Gain.connect(master);
+  pad3.start();
+
+  // Gentle LFO to modulate volume for a breathing feel
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.15; // very slow pulse
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 0.03;
+  lfo.connect(lfoGain);
+  lfoGain.connect(master.gain);
+  lfo.start();
+
+  musicNodes = { master, oscs: [pad1, pad2, pad3, lfo] };
+}
+
+function stopMusic() {
+  if (!musicNodes) return;
+  musicNodes.oscs.forEach(o => { try { o.stop(); } catch(e) {} });
+  musicNodes.master.disconnect();
+  musicNodes = null;
+}
+
+function toggleMusic() {
+  musicEnabled = !musicEnabled;
+  localStorage.setItem('bobadrop_setting_music', musicEnabled);
+  if (musicEnabled) startMusic();
+  else stopMusic();
 }
 
 function resetGame() {
@@ -575,10 +670,13 @@ function screenToCanvasY(clientY) {
   return (clientY - canvasRect.top) * canvasScaleY;
 }
 
+let lastDroppedCup = null;  // track the most recently dropped cup for impact sounds
+
 function dropCup() {
   if (dropCooldown > 0) return;
   const cup = activateCup(currentDropTier, dropperX, DROP_Y, 0, 0);
   if (!cup) return;
+  lastDroppedCup = cup;
   currentDropTier = nextDropTier;
   nextDropTier = Math.floor(Math.random() * (MAX_DROP_TIER + 1));
   dropCooldown = DROP_COOLDOWN;
@@ -1182,6 +1280,7 @@ function drawMainMenu() {
 
   drawButton('Play', CANVAS_W / 2 - 160, CANVAS_H / 2 - 40, 320, 80, () => {
     resetGame();
+    startMusic();
     gameState = State.IN_GAME;
   }, 'play');
 }
@@ -1220,8 +1319,7 @@ function drawPauseScreen() {
   }, 'sfx');
 
   drawToggleButton('Music', musicEnabled, btnX, 655, btnW, 65, () => {
-    musicEnabled = !musicEnabled;
-    localStorage.setItem('bobadrop_setting_music', musicEnabled);
+    toggleMusic();
   }, 'music');
 
   drawToggleButton('Haptics', hapticsEnabled, btnX, 740, btnW, 65, () => {
@@ -1235,6 +1333,7 @@ function drawPauseScreen() {
   }, 'resume');
 
   drawButton('Quit', btnX, 925, btnW, 65, () => {
+    stopMusic();
     gameState = State.MAIN_MENU;
   }, 'quit');
 }
@@ -1282,6 +1381,7 @@ function drawGameOverScreen() {
 
   drawButton('Play Again', CANVAS_W / 2 - 160, 740, 320, 80, () => {
     resetGame();
+    startMusic();
     gameState = State.IN_GAME;
   }, 'playagain');
 }
@@ -1391,6 +1491,7 @@ function loop(timestamp) {
       }
       playGameOverSound();
       vibratePattern([50, 100, 50, 100, 80]);
+      stopMusic();
       gameState = State.GAME_OVER;
     }
   }
