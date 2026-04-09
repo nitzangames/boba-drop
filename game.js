@@ -158,6 +158,55 @@ function deactivateCup(cup) {
   world.removeBody(cup.body);
 }
 
+// --- Merge Queue ---
+const mergeQueue = [];
+for (let i = 0; i < MAX_MERGES; i++) {
+  mergeQueue.push({ cupA: null, cupB: null, midX: 0, midY: 0, newTier: 0 });
+}
+let mergeCount = 0;
+
+// --- Collision Callback ---
+world.onCollision = (a, b, contact) => {
+  const cupA = a.userData;
+  const cupB = b.userData;
+
+  if (!cupA || !cupB) return;
+  if (!cupA.active || !cupB.active) return;
+  if (cupA.merging || cupB.merging) return;
+  if (cupA.tier !== cupB.tier) return;
+
+  if (mergeCount >= MAX_MERGES) return;
+  const entry = mergeQueue[mergeCount];
+  entry.cupA = cupA;
+  entry.cupB = cupB;
+  entry.midX = (a.position.x + b.position.x) / 2;
+  entry.midY = (a.position.y + b.position.y) / 2;
+  entry.newTier = cupA.tier + 1;
+  mergeCount++;
+
+  cupA.merging = true;
+  cupB.merging = true;
+};
+
+function processMerges() {
+  for (let i = 0; i < mergeCount; i++) {
+    const m = mergeQueue[i];
+    deactivateCup(m.cupA);
+    deactivateCup(m.cupB);
+
+    if (m.newTier < TIER_COUNT) {
+      activateCup(m.newTier, m.midX, m.midY, 0, MERGE_POP_VY);
+      score += TIERS[m.newTier].score;
+    } else {
+      score += TIERS[TIER_COUNT - 1].score;
+    }
+
+    m.cupA = null;
+    m.cupB = null;
+  }
+  mergeCount = 0;
+}
+
 // --- Game State ---
 const State = { MAIN_MENU: 0, IN_GAME: 1, PAUSED: 2, GAME_OVER: 3 };
 let gameState = State.IN_GAME; // Start in-game for now (menus added in Task 8)
@@ -176,6 +225,7 @@ function resetGame() {
   for (let i = 0; i < MAX_CUPS; i++) {
     if (cupPool[i].active) deactivateCup(cupPool[i]);
   }
+  mergeCount = 0;
   score = 0;
   dropCooldown = 0;
   dropperX = 0;
@@ -365,6 +415,7 @@ function loop(timestamp) {
   if (gameState === State.IN_GAME && dt > 0) {
     dropCooldown -= dt;
     world.step(dt);
+    processMerges();
   }
 
   // Render
