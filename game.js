@@ -8,6 +8,49 @@ const X_OFFSET = 540;     // center of canvas
 const Y_OFFSET = 100;     // top padding for HUD
 const BG_COLOR = '#FAF5F0';
 
+// --- Tier Data ---
+const TIERS = [
+  { name: 'Milk Tea',       radius: 0.30, score: 10,  color: '#d4a574' },
+  { name: 'Matcha',          radius: 0.36, score: 20,  color: '#7ec87e' },
+  { name: 'Strawberry',      radius: 0.42, score: 30,  color: '#f48da6' },
+  { name: 'Taro',            radius: 0.48, score: 40,  color: '#b49cd4' },
+  { name: 'Thai Tea',        radius: 0.54, score: 50,  color: '#e8945a' },
+  { name: 'Mango',           radius: 0.60, score: 60,  color: '#f0c850' },
+  { name: 'Brown Sugar',     radius: 0.66, score: 80,  color: '#8b5e3c' },
+  { name: 'Honeydew',        radius: 0.75, score: 100, color: '#a8d8a8' },
+  { name: 'Ube',             radius: 0.84, score: 130, color: '#7b5ea7' },
+  { name: 'Passion Fruit',   radius: 0.96, score: 170, color: '#d4607a' },
+  { name: 'Lychee',          radius: 1.08, score: 250, color: '#f0e8e0' },
+];
+const TIER_COUNT = 11;
+const MAX_DROP_TIER = 4;
+
+// Pre-built capsule shapes (one per tier, reused by reference)
+const TIER_SHAPES = TIERS.map(t => new Capsule(t.radius * 1.2, t.radius));
+
+// Mass for a tier (area-proportional)
+function tierMass(tier) {
+  const r = TIERS[tier].radius;
+  return r * r * 10;
+}
+
+// --- Coordinate Helpers ---
+function worldToCanvasX(wx) {
+  return wx * SCALE + X_OFFSET;
+}
+
+function worldToCanvasY(wy) {
+  return wy * SCALE + Y_OFFSET;
+}
+
+function canvasToWorldX(cx) {
+  return (cx - X_OFFSET) / SCALE;
+}
+
+function canvasToWorldY(cy) {
+  return (cy - Y_OFFSET) / SCALE;
+}
+
 // --- Canvas Setup ---
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
