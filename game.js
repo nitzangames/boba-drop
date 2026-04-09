@@ -272,7 +272,7 @@ function updateParticles(dt) {
 
 // --- Game State ---
 const State = { MAIN_MENU: 0, IN_GAME: 1, PAUSED: 2, GAME_OVER: 3 };
-let gameState = State.IN_GAME; // Start in-game for now (menus added in Task 8)
+let gameState = State.MAIN_MENU;
 let score = 0;
 let highScore = parseInt(localStorage.getItem('bobadrop_highscore')) || 0;
 let currentDropTier = Math.floor(Math.random() * (MAX_DROP_TIER + 1));
@@ -469,6 +469,262 @@ function drawDropper() {
   ctx.restore();
 }
 
+function drawWarningLine() {
+  const cy = worldToCanvasY(WARNING_Y);
+  const leftX = worldToCanvasX(-3.2);
+  const rightX = worldToCanvasX(3.2);
+
+  let anyOverflow = false;
+  for (let i = 0; i < MAX_CUPS; i++) {
+    if (cupPool[i].active && cupPool[i].overflowTimer > 0) {
+      anyOverflow = true;
+      break;
+    }
+  }
+
+  const alpha = anyOverflow ? 0.5 + 0.5 * Math.abs(Math.sin(gameTime * 4)) : 0.2;
+  ctx.save();
+  ctx.strokeStyle = `rgba(255, 77, 77, ${alpha})`;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([15, 10]);
+  ctx.beginPath();
+  ctx.moveTo(leftX, cy);
+  ctx.lineTo(rightX, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function updateOverflowTimers(dt) {
+  for (let i = 0; i < MAX_CUPS; i++) {
+    const cup = cupPool[i];
+    if (!cup.active) continue;
+    if (cup.body.renderPosition.y < WARNING_Y) {
+      cup.overflowTimer += dt;
+    } else {
+      cup.overflowTimer = 0;
+    }
+  }
+}
+
+function checkGameOver() {
+  for (let i = 0; i < MAX_CUPS; i++) {
+    if (cupPool[i].active && cupPool[i].overflowTimer >= GAME_OVER_TIME) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getMaxOverflowTimer() {
+  let max = 0;
+  for (let i = 0; i < MAX_CUPS; i++) {
+    if (cupPool[i].active && cupPool[i].overflowTimer > max) {
+      max = cupPool[i].overflowTimer;
+    }
+  }
+  return max;
+}
+
+function drawRoundedRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawButton(label, x, y, w, h, action, id) {
+  activeButtons.push({ id, x, y, w, h, action });
+  ctx.fillStyle = '#e6e6e6';
+  drawRoundedRect(x, y, w, h, 12);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 40px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x + w / 2, y + h / 2);
+}
+
+function drawToggleButton(label, enabled, x, y, w, h, action, id) {
+  activeButtons.push({ id, x, y, w, h, action });
+  ctx.fillStyle = enabled ? '#4CAF50' : '#888';
+  drawRoundedRect(x, y, w, h, 12);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${label}: ${enabled ? 'ON' : 'OFF'}`, x + w / 2, y + h / 2);
+}
+
+function drawHUD() {
+  // HUD background strip
+  ctx.fillStyle = 'rgba(139, 94, 60, 0.85)';
+  ctx.fillRect(0, 0, CANVAS_W, 200);
+
+  // Score
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 64px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(score.toString(), 30, 20);
+
+  // High score
+  ctx.font = '32px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillText(`Best: ${highScore}`, 30, 90);
+
+  // Next preview
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '28px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('Next:', CANVAS_W - 100, 25);
+
+  const nextTier = TIERS[nextDropTier];
+  ctx.save();
+  ctx.translate(CANVAS_W - 70, 80);
+  ctx.rotate(Math.PI / 2);
+  const previewScale = 0.6;
+  ctx.scale(previewScale, previewScale);
+  drawCapsule(ctx, nextTier.radius * 1.2, nextTier.radius, nextTier.color, tierTextColor(nextDropTier), '');
+  ctx.restore();
+
+  // Countdown warning
+  const maxOverflow = getMaxOverflowTimer();
+  if (maxOverflow > 0) {
+    const remaining = Math.ceil(GAME_OVER_TIME - maxOverflow);
+    const pulse = 1.0 + 0.15 * Math.sin(gameTime * 8);
+    ctx.save();
+    ctx.translate(CANVAS_W / 2, worldToCanvasY(WARNING_Y) - 60);
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = '#ff4d4d';
+    ctx.font = 'bold 80px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(remaining.toString(), 0, 0);
+    ctx.restore();
+  }
+
+  // Pause button
+  const pauseBtn = { id: 'pause', x: CANVAS_W - 80, y: 130, w: 60, h: 60, action: () => { gameState = State.PAUSED; } };
+  activeButtons.push(pauseBtn);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  drawRoundedRect(pauseBtn.x, pauseBtn.y, pauseBtn.w, pauseBtn.h, 8);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('||', pauseBtn.x + 30, pauseBtn.y + 30);
+}
+
+function drawMainMenu() {
+  activeButtons = [];
+
+  ctx.fillStyle = '#8b5e3c';
+  ctx.font = 'bold 100px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Boba Drop', CANVAS_W / 2, 400);
+
+  ctx.fillStyle = '#888';
+  ctx.font = '36px sans-serif';
+  ctx.fillText(`Best: ${highScore}`, CANVAS_W / 2, 500);
+
+  drawButton('Play', CANVAS_W / 2 - 150, 650, 300, 80, () => {
+    resetGame();
+    gameState = State.IN_GAME;
+  }, 'play');
+}
+
+function drawPauseScreen() {
+  activeButtons = [];
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 80px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Paused', CANVAS_W / 2, 500);
+
+  const btnX = CANVAS_W / 2 - 175;
+  const btnW = 350;
+
+  drawToggleButton('SFX', sfxEnabled, btnX, 650, btnW, 70, () => {
+    sfxEnabled = !sfxEnabled;
+    localStorage.setItem('bobadrop_setting_sfx', sfxEnabled);
+  }, 'sfx');
+
+  drawToggleButton('Music', musicEnabled, btnX, 740, btnW, 70, () => {
+    musicEnabled = !musicEnabled;
+    localStorage.setItem('bobadrop_setting_music', musicEnabled);
+  }, 'music');
+
+  drawButton('Resume', btnX, 850, btnW, 70, () => {
+    gameState = State.IN_GAME;
+  }, 'resume');
+
+  drawButton('Quit', btnX, 940, btnW, 70, () => {
+    gameState = State.MAIN_MENU;
+  }, 'quit');
+}
+
+function drawGameOverScreen() {
+  activeButtons = [];
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 90px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Game Over', CANVAS_W / 2, 500);
+
+  ctx.font = '50px sans-serif';
+  ctx.fillText(`Score: ${score}`, CANVAS_W / 2, 620);
+
+  ctx.font = '36px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillText(`Best: ${highScore}`, CANVAS_W / 2, 690);
+
+  drawButton('Play Again', CANVAS_W / 2 - 175, 780, 350, 80, () => {
+    resetGame();
+    gameState = State.IN_GAME;
+  }, 'playagain');
+}
+
+function drawEvolutionLine() {
+  const lineY = CANVAS_H - 80;
+  const totalWidth = 900;
+  const startX = (CANVAS_W - totalWidth) / 2;
+  const spacing = totalWidth / (TIER_COUNT - 1);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.fillRect(startX - 20, lineY - 40, totalWidth + 40, 80);
+
+  for (let i = 0; i < TIER_COUNT; i++) {
+    const tier = TIERS[i];
+    const cx = startX + i * spacing;
+    ctx.save();
+    ctx.translate(cx, lineY);
+    ctx.rotate(Math.PI / 2);
+    const s = 0.35;
+    ctx.scale(s, s);
+    drawCapsule(ctx, tier.radius * 1.2, tier.radius, tier.color, '', '');
+    ctx.restore();
+  }
+}
+
 function drawParticles() {
   for (let i = 0; i < MAX_PARTICLES; i++) {
     const p = particlePool[i];
@@ -499,18 +755,49 @@ function loop(timestamp) {
     world.step(dt);
     processMerges();
     updateParticles(dt);
+    updateOverflowTimers(dt);
+
+    if (checkGameOver()) {
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('bobadrop_highscore', highScore.toString());
+      }
+      gameState = State.GAME_OVER;
+    }
   }
 
   // Render
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  drawContainer();
-  drawCups();
-  drawParticles();
-  drawDropper();
+  if (gameState === State.MAIN_MENU) {
+    drawContainer();
+    drawEvolutionLine();
+    drawMainMenu();
+  } else if (gameState === State.IN_GAME) {
+    activeButtons = [];
+    drawContainer();
+    drawWarningLine();
+    drawCups();
+    drawParticles();
+    drawDropper();
+    drawEvolutionLine();
+    drawHUD();
+  } else if (gameState === State.PAUSED) {
+    drawContainer();
+    drawWarningLine();
+    drawCups();
+    drawEvolutionLine();
+    drawPauseScreen();
+  } else if (gameState === State.GAME_OVER) {
+    drawContainer();
+    drawCups();
+    drawEvolutionLine();
+    drawGameOverScreen();
+  }
 
   requestAnimationFrame(loop);
 }
 
+gameState = State.MAIN_MENU;
 requestAnimationFrame(loop);
