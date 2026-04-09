@@ -158,11 +158,108 @@ function deactivateCup(cup) {
   world.removeBody(cup.body);
 }
 
+// --- Game State ---
+const State = { MAIN_MENU: 0, IN_GAME: 1, PAUSED: 2, GAME_OVER: 3 };
+let gameState = State.IN_GAME; // Start in-game for now (menus added in Task 8)
+let score = 0;
+let highScore = parseInt(localStorage.getItem('bobadrop_highscore')) || 0;
+let currentDropTier = Math.floor(Math.random() * (MAX_DROP_TIER + 1));
+let nextDropTier = Math.floor(Math.random() * (MAX_DROP_TIER + 1));
+let dropCooldown = 0;
+let dropperX = 0;
+let gameTime = 0;
+
+let sfxEnabled = localStorage.getItem('bobadrop_setting_sfx') !== 'false';
+let musicEnabled = localStorage.getItem('bobadrop_setting_music') !== 'false';
+
+function resetGame() {
+  for (let i = 0; i < MAX_CUPS; i++) {
+    if (cupPool[i].active) deactivateCup(cupPool[i]);
+  }
+  score = 0;
+  dropCooldown = 0;
+  dropperX = 0;
+  currentDropTier = Math.floor(Math.random() * (MAX_DROP_TIER + 1));
+  nextDropTier = Math.floor(Math.random() * (MAX_DROP_TIER + 1));
+}
+
 // --- Canvas Setup ---
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 canvas.width = CANVAS_W;
 canvas.height = CANVAS_H;
+
+// --- Input ---
+function screenToCanvasX(clientX) {
+  const rect = canvas.getBoundingClientRect();
+  return (clientX - rect.left) * (canvas.width / rect.width);
+}
+
+function screenToCanvasY(clientY) {
+  const rect = canvas.getBoundingClientRect();
+  return (clientY - rect.top) * (canvas.height / rect.height);
+}
+
+function dropCup() {
+  if (dropCooldown > 0) return;
+  const cup = activateCup(currentDropTier, dropperX, DROP_Y, 0, 0);
+  if (!cup) return;
+  currentDropTier = nextDropTier;
+  nextDropTier = Math.floor(Math.random() * (MAX_DROP_TIER + 1));
+  dropCooldown = DROP_COOLDOWN;
+}
+
+// Button hit testing
+let activeButtons = [];
+let pointerUsedForButton = false;
+
+function handleButtonClick(cx, cy) {
+  for (const btn of activeButtons) {
+    if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
+      btn.action();
+      return true;
+    }
+  }
+  return false;
+}
+
+canvas.addEventListener('pointermove', (e) => {
+  if (gameState !== State.IN_GAME) return;
+  const cx = screenToCanvasX(e.clientX);
+  const wx = canvasToWorldX(cx);
+  dropperX = Math.max(LEFT_BOUND, Math.min(RIGHT_BOUND, wx));
+});
+
+canvas.addEventListener('pointerdown', (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  const cx = screenToCanvasX(e.clientX);
+  const cy = screenToCanvasY(e.clientY);
+
+  pointerUsedForButton = false;
+
+  if (gameState === State.IN_GAME) {
+    const wx = canvasToWorldX(cx);
+    dropperX = Math.max(LEFT_BOUND, Math.min(RIGHT_BOUND, wx));
+  }
+
+  if (handleButtonClick(cx, cy)) {
+    pointerUsedForButton = true;
+  }
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  if (gameState === State.IN_GAME && !pointerUsedForButton) {
+    dropCup();
+  }
+  pointerUsedForButton = false;
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (gameState === State.IN_GAME) gameState = State.PAUSED;
+    else if (gameState === State.PAUSED) gameState = State.IN_GAME;
+  }
+});
 
 // --- Rendering Helpers ---
 function drawContainer() {
@@ -229,15 +326,44 @@ function drawCups() {
   }
 }
 
+function drawDropper() {
+  if (gameState !== State.IN_GAME) return;
+
+  const cx = worldToCanvasX(dropperX);
+  const cy = worldToCanvasY(DROP_Y);
+  const tier = TIERS[currentDropTier];
+
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.PI / 2);
+  drawCapsule(ctx, tier.radius * 1.2, tier.radius, tier.color, tierTextColor(currentDropTier), tier.name);
+  ctx.restore();
+
+  // Drop guide line
+  ctx.save();
+  ctx.setLineDash([8, 8]);
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + tier.radius * SCALE);
+  ctx.lineTo(cx, worldToCanvasY(WARNING_Y));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
 // --- Game Loop ---
 let lastTime = 0;
 
 function loop(timestamp) {
   const dt = lastTime === 0 ? 0 : Math.min((timestamp - lastTime) / 1000, 1 / 30);
   lastTime = timestamp;
+  gameTime += dt;
 
-  // Physics
-  if (dt > 0) {
+  // Update
+  if (gameState === State.IN_GAME && dt > 0) {
+    dropCooldown -= dt;
     world.step(dt);
   }
 
@@ -247,6 +373,7 @@ function loop(timestamp) {
 
   drawContainer();
   drawCups();
+  drawDropper();
 
   requestAnimationFrame(loop);
 }
