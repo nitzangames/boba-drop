@@ -597,16 +597,9 @@ function handleButtonClick(cx, cy) {
   return false;
 }
 
-document.addEventListener('mousemove', (e) => {
+canvas.addEventListener('pointermove', (e) => {
   rawPointerX = e.clientX;
 });
-
-canvas.addEventListener('touchmove', (e) => {
-  e.preventDefault(); // prevent scrolling
-  if (e.touches.length > 0) {
-    rawPointerX = e.touches[0].clientX;
-  }
-}, { passive: false });
 
 canvas.addEventListener('pointerdown', (e) => {
   initAudio();
