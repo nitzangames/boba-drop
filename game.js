@@ -7,6 +7,7 @@ const SCALE = 154;        // pixels per world unit (~1080 / 7)
 const X_OFFSET = 540;     // center of canvas
 const Y_OFFSET = 132;     // top padding for HUD
 const BG_COLOR = '#FAF5F0';
+const VERSION = '0.3.0';
 
 // --- Tier Data ---
 const TIERS = [
@@ -1437,6 +1438,13 @@ function loop(timestamp) {
     drawEvolutionLine();
     drawGameOverScreen();
   }
+
+  // Version
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.font = '18px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('v' + VERSION, CANVAS_W - 10, CANVAS_H - 10);
 
   requestAnimationFrame(loop);
 }
