@@ -99,6 +99,65 @@ for (let i = 0; i < CONTAINER_POINTS.length - 1; i++) {
   }));
 }
 
+// --- Cup Pool ---
+const cupPool = [];
+for (let i = 0; i < MAX_CUPS; i++) {
+  const body = new Body({
+    shape: TIER_SHAPES[0],
+    position: new Vec2(0, -100),
+    mass: tierMass(0),
+    restitution: CUP_RESTITUTION,
+    friction: CUP_FRICTION,
+  });
+  cupPool.push({
+    body,
+    tier: 0,
+    active: false,
+    merging: false,
+    overflowTimer: 0,
+  });
+}
+
+function activateCup(tier, x, y, vx, vy) {
+  for (let i = 0; i < MAX_CUPS; i++) {
+    const cup = cupPool[i];
+    if (cup.active) continue;
+
+    cup.tier = tier;
+    cup.active = true;
+    cup.merging = false;
+    cup.overflowTimer = 0;
+
+    const body = cup.body;
+    body.shape = TIER_SHAPES[tier];
+    body.mass = tierMass(tier);
+    body.inverseMass = 1 / body.mass;
+    body.inertia = body.shape.computeInertia(body.mass);
+    body.inverseInertia = body.inertia > 0 ? 1 / body.inertia : 0;
+    body.position.set(x, y);
+    body.previousPosition.set(x, y);
+    body.renderPosition.set(x, y);
+    body.velocity.set(vx, vy);
+    body.angularVelocity = 0;
+    body.angle = 0;
+    body.previousAngle = 0;
+    body.renderAngle = 0;
+    body.isSleeping = false;
+    body.sleepTimer = 0;
+    body.userData = cup;
+
+    world.addBody(body);
+    return cup;
+  }
+  return null;
+}
+
+function deactivateCup(cup) {
+  cup.active = false;
+  cup.merging = false;
+  world.removeBody(cup.body);
+}
+
 // --- Canvas Setup ---
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -119,6 +178,57 @@ function drawContainer() {
   ctx.stroke();
 }
 
+function drawCapsule(ctx, length, radius, color, textColor, label) {
+  const halfLen = length / 2;
+  const r = radius * SCALE;
+  const hl = halfLen * SCALE;
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(-hl, 0, r, Math.PI * 0.5, Math.PI * 1.5);
+  ctx.lineTo(hl, -r);
+  ctx.arc(hl, 0, r, Math.PI * 1.5, Math.PI * 0.5);
+  ctx.lineTo(-hl, r);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  if (label) {
+    const fontSize = Math.max(r * 0.55, 10);
+    ctx.fillStyle = textColor || '#fff';
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 0, 0);
+  }
+}
+
+function tierTextColor(tier) {
+  const dark = [4, 6, 8];
+  return dark.includes(tier) ? '#fff' : '#333';
+}
+
+function drawCups() {
+  for (let i = 0; i < MAX_CUPS; i++) {
+    const cup = cupPool[i];
+    if (!cup.active) continue;
+
+    const body = cup.body;
+    const tier = TIERS[cup.tier];
+    const cx = worldToCanvasX(body.renderPosition.x);
+    const cy = worldToCanvasY(body.renderPosition.y);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(body.renderAngle + Math.PI / 2);
+    drawCapsule(ctx, tier.radius * 1.2, tier.radius, tier.color, tierTextColor(cup.tier), tier.name);
+    ctx.restore();
+  }
+}
+
 // --- Game Loop ---
 let lastTime = 0;
 
@@ -136,6 +246,7 @@ function loop(timestamp) {
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
   drawContainer();
+  drawCups();
 
   requestAnimationFrame(loop);
 }
