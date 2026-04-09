@@ -1283,6 +1283,13 @@ function drawMainMenu() {
     startMusic();
     gameState = State.IN_GAME;
   }, 'play');
+
+  // Version under play button
+  ctx.fillStyle = 'rgba(100,70,40,0.4)';
+  ctx.font = '22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('v' + VERSION, CANVAS_W / 2, CANVAS_H / 2 + 55);
 }
 
 function drawPauseScreen() {
