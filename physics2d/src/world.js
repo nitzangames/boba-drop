@@ -189,7 +189,7 @@ export class World {
 
     // Collision detection and resolution
     let collisionPairs = 0;
-    const solverIterations = 3;
+    const solverIterations = 6;
     for (let iter = 0; iter < solverIterations; iter++) {
       for (let pass = 0; pass < 2; pass++) {
         for (let i = 0; i < this.bodies.length; i++) {
