@@ -775,7 +775,7 @@ function loop(timestamp) {
     drawEvolutionLine();
     drawMainMenu();
   } else if (gameState === State.IN_GAME) {
-    activeButtons = [];
+    activeButtons.length = 0;
     drawContainer();
     drawWarningLine();
     drawCups();
