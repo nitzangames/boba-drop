@@ -201,10 +201,73 @@ function processMerges() {
       score += TIERS[TIER_COUNT - 1].score;
     }
 
+    spawnParticles(m.midX, m.midY, TIERS[Math.min(m.newTier, TIER_COUNT - 1)].color);
+
     m.cupA = null;
     m.cupB = null;
   }
   mergeCount = 0;
+}
+
+// --- Particle Pool ---
+const PARTICLE_LIFETIME = 0.3;
+const PARTICLES_PER_MERGE_MIN = 8;
+const PARTICLES_PER_MERGE_MAX = 12;
+
+const particlePool = [];
+for (let i = 0; i < MAX_PARTICLES; i++) {
+  particlePool.push({
+    x: 0, y: 0,
+    vx: 0, vy: 0,
+    alpha: 0,
+    radius: 0,
+    startRadius: 0,
+    color: '',
+    life: 0,
+    active: false,
+  });
+}
+
+function spawnParticles(worldX, worldY, color) {
+  const count = PARTICLES_PER_MERGE_MIN + Math.floor(Math.random() * (PARTICLES_PER_MERGE_MAX - PARTICLES_PER_MERGE_MIN + 1));
+  for (let n = 0; n < count; n++) {
+    let p = null;
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      if (!particlePool[i].active) { p = particlePool[i]; break; }
+    }
+    if (!p) break;
+
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 2;
+    p.x = worldX;
+    p.y = worldY;
+    p.vx = Math.cos(angle) * speed;
+    p.vy = Math.sin(angle) * speed;
+    p.startRadius = 0.06 + Math.random() * 0.04;
+    p.radius = p.startRadius;
+    p.color = color;
+    p.life = PARTICLE_LIFETIME;
+    p.alpha = 1;
+    p.active = true;
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = 0; i < MAX_PARTICLES; i++) {
+    const p = particlePool[i];
+    if (!p.active) continue;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += GRAVITY * dt;
+    p.life -= dt;
+    if (p.life <= 0) {
+      p.active = false;
+      continue;
+    }
+    const t = p.life / PARTICLE_LIFETIME;
+    p.alpha = t;
+    p.radius = p.startRadius * t;
+  }
 }
 
 // --- Game State ---
@@ -226,6 +289,9 @@ function resetGame() {
     if (cupPool[i].active) deactivateCup(cupPool[i]);
   }
   mergeCount = 0;
+  for (let i = 0; i < MAX_PARTICLES; i++) {
+    particlePool[i].active = false;
+  }
   score = 0;
   dropCooldown = 0;
   dropperX = 0;
@@ -403,6 +469,22 @@ function drawDropper() {
   ctx.restore();
 }
 
+function drawParticles() {
+  for (let i = 0; i < MAX_PARTICLES; i++) {
+    const p = particlePool[i];
+    if (!p.active) continue;
+    const cx = worldToCanvasX(p.x);
+    const cy = worldToCanvasY(p.y);
+    const r = p.radius * SCALE;
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 // --- Game Loop ---
 let lastTime = 0;
 
@@ -416,6 +498,7 @@ function loop(timestamp) {
     dropCooldown -= dt;
     world.step(dt);
     processMerges();
+    updateParticles(dt);
   }
 
   // Render
@@ -424,6 +507,7 @@ function loop(timestamp) {
 
   drawContainer();
   drawCups();
+  drawParticles();
   drawDropper();
 
   requestAnimationFrame(loop);
