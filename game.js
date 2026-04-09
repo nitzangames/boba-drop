@@ -1440,11 +1440,11 @@ function loop(timestamp) {
   }
 
   // Version
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.font = '18px sans-serif';
+  ctx.fillStyle = 'rgba(100,70,40,0.5)';
+  ctx.font = '24px sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
-  ctx.fillText('v' + VERSION, CANVAS_W - 10, CANVAS_H - 10);
+  ctx.fillText('v' + VERSION, CANVAS_W - 15, CANVAS_H - 15);
 
   requestAnimationFrame(loop);
 }
