@@ -1199,16 +1199,16 @@ function drawHUD() {
   ctx.restore();
 
   // Pause button — far right
-  const pauseBtn = { id: 'pause', x: CANVAS_W - 90, y: 20, w: 60, h: 60, action: () => { gameState = State.PAUSED; } };
+  const pauseBtn = { id: 'pause', x: CANVAS_W - 110, y: 55, w: 80, h: 80, action: () => { gameState = State.PAUSED; } };
   activeButtons.push(pauseBtn);
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  drawRoundedRect(pauseBtn.x, pauseBtn.y, pauseBtn.w, pauseBtn.h, 8);
+  drawRoundedRect(pauseBtn.x, pauseBtn.y, pauseBtn.w, pauseBtn.h, 12);
   ctx.fill();
   ctx.fillStyle = '#fff';
-  ctx.font = '36px sans-serif';
+  ctx.font = '44px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('||', pauseBtn.x + 30, pauseBtn.y + 30);
+  ctx.fillText('||', pauseBtn.x + 40, pauseBtn.y + 40);
 
   // Countdown warning
   const maxOverflow = getMaxOverflowTimer();
